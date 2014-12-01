@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.logging.*;
@@ -91,7 +92,8 @@ public class COMP3200 extends Activity {
             logHandler.setFormatter(new Formatter() {
                 @Override
                 public String format(LogRecord r) {
-                    StringBuilder sb = new StringBuilder(new Date(r.getMillis()).toString());
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH-mm-ss");
+                    StringBuilder sb = new StringBuilder(dateFormat.format(new Date(r.getMillis())));
                     sb.append("|");
                     sb.append(r.getMessage());
                     sb.append("\n");
@@ -194,7 +196,7 @@ public class COMP3200 extends Activity {
         @Override
         public void run() {
             try {
-                logger.info("==START==");
+                logger.info("--START--");
                 WifiInfo info = wifiManager.getConnectionInfo();
 
                 TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
@@ -320,7 +322,7 @@ public class COMP3200 extends Activity {
                     gpsDataField.setText(gpsDataSB.toString());
 
                 }
-                logger.info("===END===");
+                logger.info("---END---");
             } catch (Exception e) {
                 Log.e(TAG, "LogFailed=", e);
             }
