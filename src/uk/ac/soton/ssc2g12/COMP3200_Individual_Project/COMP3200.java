@@ -2,6 +2,7 @@ package uk.ac.soton.ssc2g12.COMP3200_Individual_Project;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
@@ -9,13 +10,20 @@ import android.location.LocationManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
+import java.io.File;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.util.Date;
 import java.util.List;
+import java.util.logging.*;
 
 public class COMP3200 extends Activity {
 
@@ -23,8 +31,9 @@ public class COMP3200 extends Activity {
     private static final long LOCATION_REFRESH_TIME = 0l;
     private static final float LOCATION_REFRESH_DISTANCE = 0;
     // Default 5000 (5s), set to 0 to disable repeat
-    private int logInterval = 0;
-    private int timerInterval = 83;
+    private static final int logInterval = 0;
+    private static final int timerInterval = 83;
+    private static final int locationInterval = 100;
 
     private WifiManager wifiManager;
     private LocationManager locationManager;
@@ -35,7 +44,8 @@ public class COMP3200 extends Activity {
     private int scanStatus;
     private long lastLogTime;
 
-
+    private final File logFile = new File(Environment.getExternalStorageDirectory(), "COMP3200/COMP3200_data.log");
+    private static final Logger logger = Logger.getLogger(TAG);
 
     private final LocationListener locationListener = new LocationListener() {
         @Override
@@ -66,6 +76,34 @@ public class COMP3200 extends Activity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (!logFile.exists()) {
+            try {
+                logFile.getParentFile().mkdirs();
+                logFile.createNewFile();
+            } catch (IOException e) {
+                Log.e(TAG, "Fatal Log Exception", e);
+            }
+        }
+        String logFilePathName = Environment.getExternalStorageDirectory() + "/COMP3200/COMP3200_data.log";
+
+        try {
+            FileHandler logHandler = new FileHandler(logFilePathName, Integer.MAX_VALUE, 1, true);
+            logHandler.setFormatter(new Formatter() {
+                @Override
+                public String format(LogRecord r) {
+                    StringBuilder sb = new StringBuilder(new Date(r.getMillis()).toString());
+                    sb.append("|");
+                    sb.append(r.getMessage());
+                    sb.append("\n");
+                    return sb.toString();
+                }
+            });
+            logger.setLevel(Level.ALL);
+            logger.addHandler(logHandler);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
@@ -77,7 +115,9 @@ public class COMP3200 extends Activity {
         final Button button = (Button) findViewById(R.id.manual_capture_button);
         button.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                // Perform action on click
+                // On button press, run a burst of three data points across 4 seconds
+                mHandler.postDelayed(logRunnable, 2000l);
+                mHandler.postDelayed(logRunnable, 4000l);
                 logRunnable.run();
             }
         });
@@ -87,15 +127,16 @@ public class COMP3200 extends Activity {
 
         mHandler = new Handler();
 
-        //startRepeatingTasks();
+        startRepeatingTasks();
     }
 
     @Override
-     public void onPause() {
+    public void onPause() {
         super.onPause();  // Always call the superclass method first
 
-        // Assume user is changing location between movements
+        // Reduce battery usage by removing location requests while in background
         locationManager.removeUpdates(locationListener);
+        // Assume user is changing location between movements
         lastLocation = null;
     }
 
@@ -110,20 +151,26 @@ public class COMP3200 extends Activity {
 
     @Override
     public void onDestroy() {
-        stopRepeatingTasks();
-        Log.v(TAG, "Shutdown complete.");
         super.onDestroy();
+        stopRepeatingTasks();
+        for (java.util.logging.Handler h : logger.getHandlers()) {
+            h.close();   //must call h.close or a .LCK file will remain.
+        }
     }
 
     void startRepeatingTasks() {
-        scanStatus = 1;
-        logRunnable.run();
-        timerRunnable.run();
+        if (logInterval != 0) {
+            scanStatus = 1;
+            logRunnable.run();
+            timerRunnable.run();
+        }
+        locationRunnable.run();
     }
 
     private void stopRepeatingTasks() {
         mHandler.removeCallbacks(logRunnable);
         mHandler.removeCallbacks(timerRunnable);
+        locationManager.removeUpdates(locationListener);
     }
 
     private void RequestLocation() {
@@ -132,10 +179,9 @@ public class COMP3200 extends Activity {
         Criteria criteriaForLocationService = new Criteria();
         criteriaForLocationService.setAccuracy(Criteria.ACCURACY_COARSE);
         List<String> acceptableLocationProviders = locationManager.getProviders(criteriaForLocationService, true);
-        for (String provider: acceptableLocationProviders) {
+        for (String provider : acceptableLocationProviders) {
             Location location = locationManager.getLastKnownLocation(provider);
             if (location != null) {
-
                 if (lastLocation == null || location.getAccuracy() < lastLocation.getAccuracy()) {
                     lastLocation = location;
                 }
@@ -148,7 +194,7 @@ public class COMP3200 extends Activity {
         @Override
         public void run() {
             try {
-                //Log.v(TAG, "Running logger.");
+                logger.info("==START==");
                 WifiInfo info = wifiManager.getConnectionInfo();
 
                 TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
@@ -181,32 +227,34 @@ public class COMP3200 extends Activity {
                 } else {
                     // start logging data
                     String stringSSID = "SSID=" + ssid;
-                    Log.d(TAG, stringSSID);
+                    logger.info(stringSSID);
                     wifiDataSB.append(stringSSID);
                     wifiDataSB.append("\n");
 
                     int rssi = info.getRssi();
                     int signalPercent = WifiManager.calculateSignalLevel(rssi, 100);
                     String stringSignalStrength = "SignalStrength=" + signalPercent;
-                    Log.d(TAG, stringSignalStrength);
+                    logger.info(stringSignalStrength);
                     wifiDataSB.append(stringSignalStrength);
                     wifiDataSB.append("\n");
 
                     String bssid = info.getBSSID();
                     String stringBSSID = "BSSID=" + bssid;
-                    Log.d(TAG, stringBSSID);
+                    logger.info(stringBSSID);
                     wifiDataSB.append(stringBSSID);
                     wifiDataSB.append("\n");
 
                     int speed = info.getLinkSpeed();
                     String stringLinkSpeed = "LinkSpeed=" + speed;
-                    Log.d(TAG, stringLinkSpeed);
+                    logger.info(stringLinkSpeed);
                     wifiDataSB.append(stringLinkSpeed);
                     wifiDataSB.append("\n");
 
                     int ip = info.getIpAddress();
-                    String stringIP = "IpAddress=" + ip;
-                    Log.d(TAG, stringIP);
+                    // convert to standard human-readable format
+                    InetAddress currentAddress = InetAddress.getByAddress(BigInteger.valueOf(ip).toByteArray());
+                    String stringIP = "IpAddress=" + currentAddress.getHostAddress();
+                    logger.info(stringIP);
                     wifiDataSB.append(stringIP);
                     wifiDataSB.append("\n");
 
@@ -220,7 +268,7 @@ public class COMP3200 extends Activity {
                 long bestTime = 0l;
 
                 List<String> matchingProviders = locationManager.getAllProviders();
-                for (String provider: matchingProviders) {
+                for (String provider : matchingProviders) {
                     Location location = locationManager.getLastKnownLocation(provider);
                     if (location != null) {
                         float accuracy = location.getAccuracy();
@@ -232,9 +280,8 @@ public class COMP3200 extends Activity {
                             bestResult = location;
                             bestAccuracy = accuracy;
                             bestTime = time;
-                        }
-                        else if (time < minTime &&
-                            bestAccuracy == Float.MAX_VALUE && time > bestTime){
+                        } else if (time < minTime &&
+                                bestAccuracy == Float.MAX_VALUE && time > bestTime) {
                             bestResult = location;
                             bestTime = time;
                         }
@@ -250,22 +297,22 @@ public class COMP3200 extends Activity {
                 } else {
                     // start logging data
                     String stringLat = "Lat=" + lastLocation.getLatitude();
-                    Log.d(TAG, stringLat);
+                    logger.info(stringLat);
                     gpsDataSB.append(stringLat);
                     gpsDataSB.append("\n");
 
                     String stringLong = "Long=" + lastLocation.getLongitude();
-                    Log.d(TAG, stringLong);
+                    logger.info(stringLong);
                     gpsDataSB.append(stringLong);
                     gpsDataSB.append("\n");
 
                     String stringAcc = "Acc=" + lastLocation.getAccuracy();
-                    Log.d(TAG, stringAcc);
+                    logger.info(stringAcc);
                     gpsDataSB.append(stringAcc);
                     gpsDataSB.append("\n");
 
                     String stringSpeed = "Speed=" + lastLocation.getSpeed();
-                    Log.d(TAG, stringSpeed);
+                    logger.info(stringSpeed);
                     gpsDataSB.append(stringSpeed);
                     gpsDataSB.append("\n");
 
@@ -273,6 +320,7 @@ public class COMP3200 extends Activity {
                     gpsDataField.setText(gpsDataSB.toString());
 
                 }
+                logger.info("===END===");
             } catch (Exception e) {
                 Log.e(TAG, "LogFailed=", e);
             }
@@ -294,6 +342,27 @@ public class COMP3200 extends Activity {
             // display countdown on device screen
             Long deltaTime = logInterval - (System.currentTimeMillis() - lastLogTime);
             timerField.setText(deltaTime.toString());
+        }
+    };
+
+
+    private final Runnable locationRunnable = new Runnable() {
+
+        @Override
+        public void run() {
+            TextView initialisedField = (TextView) findViewById(R.id.initialised_field);
+
+            if (lastLocation == null) {
+                // if there is no location data to record, let the user know
+                initialisedField.setText("Not ready to record - no location data");
+                initialisedField.setTextColor(Color.RED);
+                // check again in X seconds
+                mHandler.postDelayed(this, locationInterval);
+            } else {
+                initialisedField.setText("Ready to record - location data available");
+                initialisedField.setTextColor(Color.GREEN);
+                // no need to readd the delayed action
+            }
         }
     };
 }
