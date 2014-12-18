@@ -32,7 +32,7 @@ public class COMP3200 extends Activity {
     private static final long LOCATION_REFRESH_TIME = 0l;
     private static final float LOCATION_REFRESH_DISTANCE = 0;
     // Default 5000 (5s), set to 0 to disable repeat
-    private static final int logInterval = 0;
+    private static final int logInterval = 3000;
     private static final int timerInterval = 83;
     private static final int locationInterval = 100;
 
@@ -43,6 +43,7 @@ public class COMP3200 extends Activity {
     private Location lastLocation;
 
     private int scanStatus;
+    private int logNumber;
     private long lastLogTime;
 
     private final File logFile = new File(Environment.getExternalStorageDirectory(), "COMP3200/COMP3200_data.log");
@@ -118,8 +119,8 @@ public class COMP3200 extends Activity {
         button.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 // On button press, run a burst of three data points across 4 seconds
-                mHandler.postDelayed(logRunnable, 2000l);
-                mHandler.postDelayed(logRunnable, 4000l);
+                //mHandler.postDelayed(logRunnable, 2000l);
+                //mHandler.postDelayed(logRunnable, 4000l);
                 logRunnable.run();
             }
         });
@@ -128,6 +129,8 @@ public class COMP3200 extends Activity {
         initialisedField.setText("Application initialised.");
 
         mHandler = new Handler();
+
+        logNumber = 0;
 
         startRepeatingTasks();
     }
@@ -164,7 +167,7 @@ public class COMP3200 extends Activity {
         if (logInterval != 0) {
             scanStatus = 1;
             logRunnable.run();
-            timerRunnable.run();
+            //timerRunnable.run();
         }
         locationRunnable.run();
     }
@@ -197,19 +200,32 @@ public class COMP3200 extends Activity {
         public void run() {
             try {
                 logger.info("--START--");
+                // register next log run
+                lastLogTime = System.currentTimeMillis();
+                if (logInterval != 0) {
+                    mHandler.postDelayed(this, logInterval);
+                }
+
+                // record time - this serves as a unique ID for the record
+                String stringTime = "Time=" + lastLogTime;
+                logger.info(stringTime);
+
+                // obtain connection info
                 WifiInfo info = wifiManager.getConnectionInfo();
 
+                // find user interface objects
                 TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
                 StringBuilder wifiDataSB = new StringBuilder();
 
                 TextView gpsDataField = (TextView) findViewById(R.id.gps_data_field);
                 StringBuilder gpsDataSB = new StringBuilder();
 
-                // register next log run
-                lastLogTime = System.currentTimeMillis();
-                if (logInterval != 0) {
-                    mHandler.postDelayed(this, logInterval);
-                }
+                TextView initialisedField = (TextView) findViewById(R.id.initialised_field);
+                TextView countdownField = (TextView) findViewById(R.id.countdown_field);
+
+                // show log number
+                logNumber++;
+                countdownField.setText("Record #" + logNumber);
 
                 String ssid = info.getSSID();
                 //if (false) {
@@ -235,6 +251,10 @@ public class COMP3200 extends Activity {
 
                     int rssi = info.getRssi();
                     int signalPercent = WifiManager.calculateSignalLevel(rssi, 100);
+                    String stringSignalDB = "SignalDB=" + rssi;
+                    logger.info(stringSignalDB);
+                    wifiDataSB.append(stringSignalDB);
+                    wifiDataSB.append("\n");
                     String stringSignalStrength = "SignalStrength=" + signalPercent;
                     logger.info(stringSignalStrength);
                     wifiDataSB.append(stringSignalStrength);
