@@ -31,8 +31,8 @@
     <Button
             android:layout_height="wrap_content"
             android:layout_width="wrap_content"
-            android:text="Capture Data"
-            android:id="@+id/manual_capture_button"
+            android:text="New Data Group"
+            android:id="@+id/new_data_group_button"
             />
 </LinearLayout>
 

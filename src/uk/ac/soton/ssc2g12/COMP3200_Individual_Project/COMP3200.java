@@ -31,10 +31,12 @@ public class COMP3200 extends Activity {
     private static final String TAG = "COMP3200";
     private static final long LOCATION_REFRESH_TIME = 0l;
     private static final float LOCATION_REFRESH_DISTANCE = 0;
+
     // Default 5000 (5s), set to 0 to disable repeat
-    private static final int logInterval = 3000;
+    // Wifi card samples at 0.5Hz, Nyquist sampling rate 1Hz (1000ms/sample)
+    private static final int logInterval = 1000;
     private static final int timerInterval = 83;
-    private static final int locationInterval = 100;
+    private static final int locationInterval = 500;
 
     private WifiManager wifiManager;
     private LocationManager locationManager;
@@ -44,6 +46,7 @@ public class COMP3200 extends Activity {
 
     private int scanStatus;
     private int logNumber;
+    private int groupNumber = 0;
     private long lastLogTime;
 
     private final File logFile = new File(Environment.getExternalStorageDirectory(), "COMP3200/COMP3200_data.log");
@@ -115,13 +118,14 @@ public class COMP3200 extends Activity {
 
         setContentView(R.layout.main);
 
-        final Button button = (Button) findViewById(R.id.manual_capture_button);
+        final Button button = (Button) findViewById(R.id.new_data_group_button);
         button.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 // On button press, run a burst of three data points across 4 seconds
                 //mHandler.postDelayed(logRunnable, 2000l);
                 //mHandler.postDelayed(logRunnable, 4000l);
-                logRunnable.run();
+                //logRunnable.run();
+                groupNumber++;
             }
         });
 
@@ -280,6 +284,11 @@ public class COMP3200 extends Activity {
                     wifiDataSB.append(stringIP);
                     wifiDataSB.append("\n");
 
+                    String stringDataGroup = "DataGroup=" + groupNumber;
+                    logger.info(stringDataGroup);
+                    wifiDataSB.append(stringDataGroup);
+                    wifiDataSB.append("\n");
+
                     // display data
                     wifiDataField.setText(wifiDataSB.toString());
 
@@ -342,9 +351,10 @@ public class COMP3200 extends Activity {
                     gpsDataField.setText(gpsDataSB.toString());
 
                 }
-                logger.info("---END---");
             } catch (Exception e) {
                 Log.e(TAG, "LogFailed=", e);
+            } finally {
+                logger.info("---END---");
             }
         }
     };
