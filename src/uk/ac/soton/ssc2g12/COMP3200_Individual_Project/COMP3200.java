@@ -19,11 +19,17 @@ import android.widget.TextView;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
+import java.net.URL;
+import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.*;
 
 public class COMP3200 extends Activity {
@@ -45,12 +51,185 @@ public class COMP3200 extends Activity {
     private Location lastLocation;
 
     private int scanStatus;
-    private int logNumber;
-    private int groupNumber = 0;
-    private long lastLogTime;
+    private String displayString;
+
+    public int logNumber = 0;
+
+    private final LogRunnable logRunnable = new LogRunnable();
 
     private final File logFile = new File(Environment.getExternalStorageDirectory(), "COMP3200/COMP3200_data.log");
     private static final Logger logger = Logger.getLogger(TAG);
+    private ExecutorService threadExecutor;
+
+    private class LogRunnable implements Runnable {
+        public int groupNumber = 0;
+        public long lastLogTime;
+
+        COMP3200 master;
+
+        public void setApplication(COMP3200 master) {
+            this.master = master;
+        }
+
+        @Override
+        public void run() {
+            try {
+                logger.info("--START--");
+                // register next log run
+                lastLogTime = System.currentTimeMillis();
+                if (logInterval != 0) {
+                    //mHandler.postDelayed(this, logInterval);
+                }
+
+                // record time - this serves as a unique ID for the record
+                String stringTime = "Time=" + lastLogTime;
+                logger.info(stringTime);
+
+                // obtain connection info
+                WifiInfo info = wifiManager.getConnectionInfo();
+
+                // find user interface objects
+                //TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
+                StringBuilder wifiDataSB = new StringBuilder();
+
+                //TextView gpsDataField = (TextView) findViewById(R.id.gps_data_field);
+                //StringBuilder gpsDataSB = new StringBuilder();
+
+                //TextView initialisedField = (TextView) findViewById(R.id.initialised_field);
+
+                String ssid = info.getSSID();
+                //if (false) {
+                if (ssid == null) {
+                    // don't waste log space with unconnected logging
+                    // clear recorded data field
+                    if (scanStatus == 1) {
+                        wifiDataSB.append("No data to record - not connected to network.");
+                        scanStatus++;
+                    } else if (scanStatus == 2) {
+                        wifiDataSB.append("No data to record - not connected to network..");
+                        scanStatus++;
+                    } else if (scanStatus == 3) {
+                        wifiDataSB.append("No data to record - not connected to network...");
+                        scanStatus = 1;
+                    }
+                } else {
+                    // start logging data
+                    String stringSSID = "SSID=" + ssid;
+                    logger.info(stringSSID);
+                    wifiDataSB.append(stringSSID);
+                    wifiDataSB.append("\n");
+
+                    int rssi = info.getRssi();
+                    int signalPercent = WifiManager.calculateSignalLevel(rssi, 100);
+                    String stringSignalDB = "SignalDB=" + rssi;
+                    logger.info(stringSignalDB);
+                    wifiDataSB.append(stringSignalDB);
+                    wifiDataSB.append("\n");
+                    String stringSignalStrength = "SignalStrength=" + signalPercent;
+                    logger.info(stringSignalStrength);
+                    wifiDataSB.append(stringSignalStrength);
+                    wifiDataSB.append("\n");
+
+                    String bssid = info.getBSSID();
+                    String stringBSSID = "BSSID=" + bssid;
+                    logger.info(stringBSSID);
+                    wifiDataSB.append(stringBSSID);
+                    wifiDataSB.append("\n");
+
+                    int speed = info.getLinkSpeed();
+                    String stringLinkSpeed = "LinkSpeed=" + speed;
+                    logger.info(stringLinkSpeed);
+                    wifiDataSB.append(stringLinkSpeed);
+                    wifiDataSB.append("\n");
+
+                    int ip = info.getIpAddress();
+                    // convert to standard human-readable format
+                    InetAddress currentAddress = InetAddress.getByAddress(BigInteger.valueOf(ip).toByteArray());
+                    String stringIP = "IpAddress=" + currentAddress.getHostAddress();
+                    logger.info(stringIP);
+                    wifiDataSB.append(stringIP);
+                    wifiDataSB.append("\n");
+
+                    String stringDataGroup = "DataGroup=" + groupNumber;
+                    logger.info(stringDataGroup);
+                    wifiDataSB.append(stringDataGroup);
+                    wifiDataSB.append("\n");
+
+                    double bandwidth = TestBandwidth();
+                    String stringBandwith = "Bandwidth=" + bandwidth;
+                    logger.info(stringBandwith);
+                    wifiDataSB.append(stringBandwith);
+                    wifiDataSB.append("\n");
+                    // display data
+                    master.setDisplayText(wifiDataSB.toString());
+                    //wifiDataField.setText(wifiDataSB.toString());
+
+                }
+
+                /*Location bestResult;
+                float bestAccuracy = Float.MAX_VALUE;
+                long bestTime = 0l;
+
+                List<String> matchingProviders = locationManager.getAllProviders();
+                for (String provider : matchingProviders) {
+                    Location location = locationManager.getLastKnownLocation(provider);
+                    if (location != null) {
+                        float accuracy = location.getAccuracy();
+                        long time = location.getTime();
+
+                        long minTime = 0l;
+
+                        if ((time > minTime && accuracy < bestAccuracy)) {
+                            bestResult = location;
+                            bestAccuracy = accuracy;
+                            bestTime = time;
+                        } else if (time < minTime &&
+                                bestAccuracy == Float.MAX_VALUE && time > bestTime) {
+                            bestResult = location;
+                            bestTime = time;
+                        }
+                    }
+                }
+
+                RequestLocation();
+                //if (false) {
+                if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    gpsDataField.setText("No data to record - GPS disabled");
+                } else if (lastLocation == null) {
+                    gpsDataField.setText("No data to record - location unavailable");
+                } else {
+                    // start logging data
+                    String stringLat = "Lat=" + lastLocation.getLatitude();
+                    logger.info(stringLat);
+                    gpsDataSB.append(stringLat);
+                    gpsDataSB.append("\n");
+
+                    String stringLong = "Long=" + lastLocation.getLongitude();
+                    logger.info(stringLong);
+                    gpsDataSB.append(stringLong);
+                    gpsDataSB.append("\n");
+
+                    String stringAcc = "Acc=" + lastLocation.getAccuracy();
+                    logger.info(stringAcc);
+                    gpsDataSB.append(stringAcc);
+                    gpsDataSB.append("\n");
+
+                    String stringSpeed = "Speed=" + lastLocation.getSpeed();
+                    logger.info(stringSpeed);
+                    gpsDataSB.append(stringSpeed);
+                    gpsDataSB.append("\n");
+
+                    // display data
+                    gpsDataField.setText(gpsDataSB.toString());
+
+                }*/
+            } catch (Exception e) {
+                Log.e(TAG, "LogFailed=", e);
+            } finally {
+                logger.info("---END---");
+            }
+        }
+    }
 
     private final LocationListener locationListener = new LocationListener() {
         @Override
@@ -125,7 +304,7 @@ public class COMP3200 extends Activity {
                 //mHandler.postDelayed(logRunnable, 2000l);
                 //mHandler.postDelayed(logRunnable, 4000l);
                 //logRunnable.run();
-                groupNumber++;
+                logRunnable.groupNumber++;
             }
         });
 
@@ -134,8 +313,9 @@ public class COMP3200 extends Activity {
 
         mHandler = new Handler();
 
-        logNumber = 0;
-
+        logRunnable.setApplication(this);
+        // initialise threadExecutor
+        threadExecutor = Executors.newFixedThreadPool(2);
         startRepeatingTasks();
     }
 
@@ -162,15 +342,31 @@ public class COMP3200 extends Activity {
     public void onDestroy() {
         super.onDestroy();
         stopRepeatingTasks();
+        threadExecutor.shutdownNow();
         for (java.util.logging.Handler h : logger.getHandlers()) {
             h.close();   //must call h.close or a .LCK file will remain.
         }
     }
 
+    public void setDisplayText(String displayString) {
+        this.displayString = displayString;
+    }
+
+    public void updateViews() {
+        TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
+        TextView countdownField = (TextView) findViewById(R.id.countdown_field);
+
+        // show log number
+        logNumber++;
+        countdownField.setText("Record #" + logNumber);
+        wifiDataField.setText(displayString);
+    }
+
     void startRepeatingTasks() {
         if (logInterval != 0) {
             scanStatus = 1;
-            logRunnable.run();
+           taskRunnable.run();
+            //logRunnable.run();
             //timerRunnable.run();
         }
         locationRunnable.run();
@@ -198,167 +394,6 @@ public class COMP3200 extends Activity {
         }
     }
 
-    private final Runnable logRunnable = new Runnable() {
-
-        @Override
-        public void run() {
-            try {
-                logger.info("--START--");
-                // register next log run
-                lastLogTime = System.currentTimeMillis();
-                if (logInterval != 0) {
-                    mHandler.postDelayed(this, logInterval);
-                }
-
-                // record time - this serves as a unique ID for the record
-                String stringTime = "Time=" + lastLogTime;
-                logger.info(stringTime);
-
-                // obtain connection info
-                WifiInfo info = wifiManager.getConnectionInfo();
-
-                // find user interface objects
-                TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
-                StringBuilder wifiDataSB = new StringBuilder();
-
-                TextView gpsDataField = (TextView) findViewById(R.id.gps_data_field);
-                StringBuilder gpsDataSB = new StringBuilder();
-
-                TextView initialisedField = (TextView) findViewById(R.id.initialised_field);
-                TextView countdownField = (TextView) findViewById(R.id.countdown_field);
-
-                // show log number
-                logNumber++;
-                countdownField.setText("Record #" + logNumber);
-
-                String ssid = info.getSSID();
-                //if (false) {
-                if (ssid == null) {
-                    // don't waste log space with unconnected logging
-                    // clear recorded data field
-                    if (scanStatus == 1) {
-                        wifiDataField.setText("No data to record - not connected to network.");
-                        scanStatus++;
-                    } else if (scanStatus == 2) {
-                        wifiDataField.setText("No data to record - not connected to network..");
-                        scanStatus++;
-                    } else if (scanStatus == 3) {
-                        wifiDataField.setText("No data to record - not connected to network...");
-                        scanStatus = 1;
-                    }
-                } else {
-                    // start logging data
-                    String stringSSID = "SSID=" + ssid;
-                    logger.info(stringSSID);
-                    wifiDataSB.append(stringSSID);
-                    wifiDataSB.append("\n");
-
-                    int rssi = info.getRssi();
-                    int signalPercent = WifiManager.calculateSignalLevel(rssi, 100);
-                    String stringSignalDB = "SignalDB=" + rssi;
-                    logger.info(stringSignalDB);
-                    wifiDataSB.append(stringSignalDB);
-                    wifiDataSB.append("\n");
-                    String stringSignalStrength = "SignalStrength=" + signalPercent;
-                    logger.info(stringSignalStrength);
-                    wifiDataSB.append(stringSignalStrength);
-                    wifiDataSB.append("\n");
-
-                    String bssid = info.getBSSID();
-                    String stringBSSID = "BSSID=" + bssid;
-                    logger.info(stringBSSID);
-                    wifiDataSB.append(stringBSSID);
-                    wifiDataSB.append("\n");
-
-                    int speed = info.getLinkSpeed();
-                    String stringLinkSpeed = "LinkSpeed=" + speed;
-                    logger.info(stringLinkSpeed);
-                    wifiDataSB.append(stringLinkSpeed);
-                    wifiDataSB.append("\n");
-
-                    int ip = info.getIpAddress();
-                    // convert to standard human-readable format
-                    InetAddress currentAddress = InetAddress.getByAddress(BigInteger.valueOf(ip).toByteArray());
-                    String stringIP = "IpAddress=" + currentAddress.getHostAddress();
-                    logger.info(stringIP);
-                    wifiDataSB.append(stringIP);
-                    wifiDataSB.append("\n");
-
-                    String stringDataGroup = "DataGroup=" + groupNumber;
-                    logger.info(stringDataGroup);
-                    wifiDataSB.append(stringDataGroup);
-                    wifiDataSB.append("\n");
-
-                    // display data
-                    wifiDataField.setText(wifiDataSB.toString());
-
-                }
-
-                Location bestResult;
-                float bestAccuracy = Float.MAX_VALUE;
-                long bestTime = 0l;
-
-                List<String> matchingProviders = locationManager.getAllProviders();
-                for (String provider : matchingProviders) {
-                    Location location = locationManager.getLastKnownLocation(provider);
-                    if (location != null) {
-                        float accuracy = location.getAccuracy();
-                        long time = location.getTime();
-
-                        long minTime = 0l;
-
-                        if ((time > minTime && accuracy < bestAccuracy)) {
-                            bestResult = location;
-                            bestAccuracy = accuracy;
-                            bestTime = time;
-                        } else if (time < minTime &&
-                                bestAccuracy == Float.MAX_VALUE && time > bestTime) {
-                            bestResult = location;
-                            bestTime = time;
-                        }
-                    }
-                }
-
-                RequestLocation();
-                //if (false) {
-                if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    gpsDataField.setText("No data to record - GPS disabled");
-                } else if (lastLocation == null) {
-                    gpsDataField.setText("No data to record - location unavailable");
-                } else {
-                    // start logging data
-                    String stringLat = "Lat=" + lastLocation.getLatitude();
-                    logger.info(stringLat);
-                    gpsDataSB.append(stringLat);
-                    gpsDataSB.append("\n");
-
-                    String stringLong = "Long=" + lastLocation.getLongitude();
-                    logger.info(stringLong);
-                    gpsDataSB.append(stringLong);
-                    gpsDataSB.append("\n");
-
-                    String stringAcc = "Acc=" + lastLocation.getAccuracy();
-                    logger.info(stringAcc);
-                    gpsDataSB.append(stringAcc);
-                    gpsDataSB.append("\n");
-
-                    String stringSpeed = "Speed=" + lastLocation.getSpeed();
-                    logger.info(stringSpeed);
-                    gpsDataSB.append(stringSpeed);
-                    gpsDataSB.append("\n");
-
-                    // display data
-                    gpsDataField.setText(gpsDataSB.toString());
-
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "LogFailed=", e);
-            } finally {
-                logger.info("---END---");
-            }
-        }
-    };
-
 
     private final Runnable timerRunnable = new Runnable() {
 
@@ -372,11 +407,22 @@ public class COMP3200 extends Activity {
             }
 
             // display countdown on device screen
-            Long deltaTime = logInterval - (System.currentTimeMillis() - lastLogTime);
+            Long deltaTime = logInterval - (System.currentTimeMillis() - logRunnable.lastLogTime);
             timerField.setText(deltaTime.toString());
         }
     };
 
+    private final Runnable taskRunnable = new Runnable() {
+
+        @Override
+        public void run() {
+            if (logInterval != 0) {
+                mHandler.postDelayed(this, logInterval);
+            }
+            threadExecutor.execute(logRunnable);
+            updateViews();
+        }
+    };
 
     private final Runnable locationRunnable = new Runnable() {
 
@@ -397,4 +443,54 @@ public class COMP3200 extends Activity {
             }
         }
     };
+
+    public static double TestBandwidth() {
+        try {
+            // randomise the non-unique part of the URL to avoid cache hits that might throw off measurements
+            String uuid = UUID.randomUUID().toString();
+            // this url loads the same image no matter what the final part of the URL is
+            //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/slideshow_pager/" + uuid + ".jpg");
+            //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/slideshow/" + uuid + ".jpg");
+            //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/source/" + uuid + ".jpg");
+            URL url = new URL("https://www.google.co.uk/images/nav_logo195.png");
+
+            // begin timer
+            final long startTime = System.nanoTime();
+
+
+            // check size of image
+            final URLConnection connection = url.openConnection();
+            final int size = sizeOfInputStream(connection.getInputStream());
+
+            // end timer
+            final long finishTime = System.nanoTime();
+
+            // size of bitmap / time taken to download = bandwidth available
+            double result = ((double) size) / ((finishTime - startTime) * 0.000000001d);
+            //Log.i("BandwidthDataSize", ""+size);
+            return result;
+        } catch (IOException e) {
+            //Log.e("BandwidthTestFail=", e.getMessage());
+            return -1.0d;
+        }
+    }
+
+    public static int sizeOfInputStream(InputStream is) {
+        int len = 0;
+        try {
+            while (is.read() >= 0) {
+                len += 1;
+            }
+            is.close();
+            return len;
+        } catch (IOException e) {
+            return -1;
+        }
+    }
+
+    public static void main(String[] args) {
+        while (true) {
+            System.out.println("Bandwidth = " + TestBandwidth() + " bytes/sec");
+        }
+    }
 }
