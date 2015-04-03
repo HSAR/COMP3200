@@ -2,11 +2,14 @@ package uk.ac.soton.ssc2g12.COMP3200_Individual_Project;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.TrafficStats;
+import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -16,18 +19,22 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.*;
@@ -156,9 +163,12 @@ public class COMP3200 extends Activity {
                     wifiDataSB.append("\n");
 
                     double bandwidth = TestBandwidth();
-                    String stringBandwith = "Bandwidth=" + bandwidth;
-                    logger.info(stringBandwith);
-                    wifiDataSB.append(stringBandwith);
+                    // format with padding for easier inspection
+                    String stringBandwidth = "Bandwidth=" + bandwidth;
+                    logger.info(stringBandwidth);
+                    DecimalFormat decimalFormat = new DecimalFormat("0000000.00");
+                    stringBandwidth = "Bandwidth=" + decimalFormat.format(bandwidth);
+                    wifiDataSB.append(stringBandwidth);
                     wifiDataSB.append("\n");
                     // display data
                     master.setDisplayText(wifiDataSB.toString());
@@ -315,7 +325,7 @@ public class COMP3200 extends Activity {
 
         logRunnable.setApplication(this);
         // initialise threadExecutor
-        threadExecutor = Executors.newFixedThreadPool(2);
+        threadExecutor = Executors.newFixedThreadPool(1);
         startRepeatingTasks();
     }
 
@@ -354,11 +364,6 @@ public class COMP3200 extends Activity {
 
     public void updateViews() {
         TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
-        TextView countdownField = (TextView) findViewById(R.id.countdown_field);
-
-        // show log number
-        logNumber++;
-        countdownField.setText("Record #" + logNumber);
         wifiDataField.setText(displayString);
     }
 
@@ -369,7 +374,7 @@ public class COMP3200 extends Activity {
             //logRunnable.run();
             //timerRunnable.run();
         }
-        locationRunnable.run();
+        //locationRunnable.run();
     }
 
     private void stopRepeatingTasks() {
@@ -419,7 +424,15 @@ public class COMP3200 extends Activity {
             if (logInterval != 0) {
                 mHandler.postDelayed(this, logInterval);
             }
-            threadExecutor.execute(logRunnable);
+            WifiInfo info = wifiManager.getConnectionInfo();
+            if (info.getSupplicantState() == SupplicantState.COMPLETED) {
+                TextView countdownField = (TextView) findViewById(R.id.countdown_field);
+
+                // show log number
+                logNumber++;
+                countdownField.setText("Record #" + logNumber);
+                threadExecutor.execute(logRunnable);
+            }
             updateViews();
         }
     };
@@ -447,30 +460,42 @@ public class COMP3200 extends Activity {
     public static double TestBandwidth() {
         try {
             // randomise the non-unique part of the URL to avoid cache hits that might throw off measurements
-            String uuid = UUID.randomUUID().toString();
+            //String uuid = UUID.randomUUID().toString();
             // this url loads the same image no matter what the final part of the URL is
             //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/slideshow_pager/" + uuid + ".jpg");
             //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/slideshow/" + uuid + ".jpg");
             //URL url = new URL("https://robertsspaceindustries.com/media/fif8480g2red0r/source/" + uuid + ".jpg");
-            URL url = new URL("https://www.google.co.uk/images/nav_logo195.png");
-
-            // begin timer
-            final long startTime = System.nanoTime();
-
-
+            //URL url = new URL("https://www.google.co.uk/images/nav_logo195.png"); // 16214
+            URL url = new URL("http://s.imgur.com/images/logo-1200-630.jpg?2"); // 31573
             // check size of image
             final URLConnection connection = url.openConnection();
-            final int size = sizeOfInputStream(connection.getInputStream());
+            long size;
+            //size = 31573;
+
+            HttpGet httpRequest = new HttpGet(url.toURI());
+            HttpClient httpClient = new DefaultHttpClient();
+            // begin timer
+            final long startBytes = TrafficStats.getTotalRxBytes();
+            final long startTime = System.nanoTime();
+
+            //size = sizeOfInputStream(connection.getInputStream());
+            //httpClient.execute(httpRequest);
+
+            BitmapFactory.decodeStream(connection.getInputStream());
 
             // end timer
             final long finishTime = System.nanoTime();
+            final long finishBytes = TrafficStats.getTotalRxBytes();
+
+            size = finishBytes - startBytes;
 
             // size of bitmap / time taken to download = bandwidth available
             double result = ((double) size) / ((finishTime - startTime) * 0.000000001d);
-            //Log.i("BandwidthDataSize", ""+size);
             return result;
         } catch (IOException e) {
             //Log.e("BandwidthTestFail=", e.getMessage());
+            return -1.0d;
+        } catch (URISyntaxException e) {
             return -1.0d;
         }
     }
@@ -485,12 +510,6 @@ public class COMP3200 extends Activity {
             return len;
         } catch (IOException e) {
             return -1;
-        }
-    }
-
-    public static void main(String[] args) {
-        while (true) {
-            System.out.println("Bandwidth = " + TestBandwidth() + " bytes/sec");
         }
     }
 }
