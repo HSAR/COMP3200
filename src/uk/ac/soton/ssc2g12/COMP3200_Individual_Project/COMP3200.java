@@ -99,11 +99,6 @@ public class COMP3200 extends Activity {
                 //TextView wifiDataField = (TextView) findViewById(R.id.wifi_data_field);
                 StringBuilder wifiDataSB = new StringBuilder();
 
-                //TextView gpsDataField = (TextView) findViewById(R.id.gps_data_field);
-                //StringBuilder gpsDataSB = new StringBuilder();
-
-                //TextView initialisedField = (TextView) findViewById(R.id.initialised_field);
-
                 String ssid = info.getSSID();
                 //if (false) {
                 if (ssid == null) {
@@ -176,63 +171,6 @@ public class COMP3200 extends Activity {
 
                 }
 
-                /*Location bestResult;
-                float bestAccuracy = Float.MAX_VALUE;
-                long bestTime = 0l;
-
-                List<String> matchingProviders = locationManager.getAllProviders();
-                for (String provider : matchingProviders) {
-                    Location location = locationManager.getLastKnownLocation(provider);
-                    if (location != null) {
-                        float accuracy = location.getAccuracy();
-                        long time = location.getTime();
-
-                        long minTime = 0l;
-
-                        if ((time > minTime && accuracy < bestAccuracy)) {
-                            bestResult = location;
-                            bestAccuracy = accuracy;
-                            bestTime = time;
-                        } else if (time < minTime &&
-                                bestAccuracy == Float.MAX_VALUE && time > bestTime) {
-                            bestResult = location;
-                            bestTime = time;
-                        }
-                    }
-                }
-
-                RequestLocation();
-                //if (false) {
-                if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    gpsDataField.setText("No data to record - GPS disabled");
-                } else if (lastLocation == null) {
-                    gpsDataField.setText("No data to record - location unavailable");
-                } else {
-                    // start logging data
-                    String stringLat = "Lat=" + lastLocation.getLatitude();
-                    logger.info(stringLat);
-                    gpsDataSB.append(stringLat);
-                    gpsDataSB.append("\n");
-
-                    String stringLong = "Long=" + lastLocation.getLongitude();
-                    logger.info(stringLong);
-                    gpsDataSB.append(stringLong);
-                    gpsDataSB.append("\n");
-
-                    String stringAcc = "Acc=" + lastLocation.getAccuracy();
-                    logger.info(stringAcc);
-                    gpsDataSB.append(stringAcc);
-                    gpsDataSB.append("\n");
-
-                    String stringSpeed = "Speed=" + lastLocation.getSpeed();
-                    logger.info(stringSpeed);
-                    gpsDataSB.append(stringSpeed);
-                    gpsDataSB.append("\n");
-
-                    // display data
-                    gpsDataField.setText(gpsDataSB.toString());
-
-                }*/
             } catch (Exception e) {
                 Log.e(TAG, "LogFailed=", e);
             } finally {
@@ -384,7 +322,7 @@ public class COMP3200 extends Activity {
     }
 
     private void RequestLocation() {
-        lastLocation = null;
+        //lastLocation = null;
 
         Criteria criteriaForLocationService = new Criteria();
         criteriaForLocationService.setAccuracy(Criteria.ACCURACY_COARSE);
